@@ -5,6 +5,7 @@ import {
   Sun, Wind, CircleDot, Loader2, Pencil
 } from "lucide-react";
 import { storage } from "./storage";
+import { BRANDS, PRODUCTS, curlGroup, productsForCategory, recommendedProducts, brandById } from "./products";
 
 /* ---------------------------------------------------------
    THEME — apothecary-warm, not the cream+terracotta default.
@@ -44,6 +45,148 @@ function CurlGlyph({ tightness = 1, size = 40, color = T.ink, strokeWidth = 2.4 
     <svg width={size} height={size} viewBox={`0 0 ${w} ${h}`} fill="none">
       <path d={d} stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" fill="none" />
     </svg>
+  );
+}
+
+function BrandTile({ brand, size = 44 }) {
+  const initials = brand.name
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  return (
+    <div
+      style={{ background: brand.color, width: size, height: size, minWidth: size }}
+      className="rounded-xl flex items-center justify-center"
+    >
+      <span style={{ ...mono, color: "#fff", fontSize: size * 0.32, fontWeight: 500 }}>{initials}</span>
+    </div>
+  );
+}
+
+function ProductCard({ product, selected, recommended, onClick }) {
+  const brand = brandById(product.brand);
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: selected ? T.teal : T.surface,
+        border: `1.5px solid ${selected ? T.teal : T.line}`,
+      }}
+      className="rounded-2xl p-3 flex items-center gap-3 text-left w-full transition"
+    >
+      {product.image ? (
+        <img src={product.image} alt="" style={{ width: 44, height: 44, objectFit: "cover" }} className="rounded-xl" />
+      ) : (
+        <BrandTile brand={brand} />
+      )}
+      <div className="flex-1 min-w-0">
+        <p style={{ fontSize: 13, fontWeight: 500, color: selected ? "#fff" : T.ink }} className="leading-snug">
+          {product.name}
+        </p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span style={{ ...mono, fontSize: 10, color: selected ? "#fff" : T.inkSoft, opacity: selected ? 0.85 : 1 }}>
+            {brand?.name}
+          </span>
+          {recommended && (
+            <span
+              style={{ background: selected ? "rgba(255,255,255,0.2)" : T.surfaceSunk, color: selected ? "#fff" : T.amberDeep }}
+              className="text-[10px] rounded-full px-1.5 py-0.5"
+            >
+              For your curl type
+            </span>
+          )}
+        </div>
+      </div>
+      {selected && <Check size={16} color="#fff" />}
+    </button>
+  );
+}
+
+function ProductPicker({ category, hairType, selectedNames, onToggle }) {
+  const [activeBrand, setActiveBrand] = useState(BRANDS[0].id);
+  const [customDraft, setCustomDraft] = useState("");
+  const group = curlGroup(hairType);
+  const categoryProducts = productsForCategory(category);
+  const brandsWithProducts = BRANDS.filter((b) => categoryProducts.some((p) => p.brand === b.id));
+  const visible = categoryProducts.filter((p) => p.brand === activeBrand);
+
+  useEffect(() => {
+    if (brandsWithProducts.length && !brandsWithProducts.find((b) => b.id === activeBrand)) {
+      setActiveBrand(brandsWithProducts[0].id);
+    }
+  }, [category]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div>
+      <div className="flex gap-2 overflow-x-auto pb-3 mb-1 -mx-6 px-6" style={{ scrollbarWidth: "none" }}>
+        {brandsWithProducts.map((b) => {
+          const active = activeBrand === b.id;
+          return (
+            <button
+              key={b.id}
+              onClick={() => setActiveBrand(b.id)}
+              style={{
+                background: active ? T.ink : T.surface,
+                border: `1.5px solid ${active ? T.ink : T.line}`,
+                color: active ? T.cream : T.ink,
+                whiteSpace: "nowrap",
+              }}
+              className="rounded-full px-3.5 py-2 text-xs font-medium transition flex-shrink-0"
+            >
+              {b.name}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-col gap-2 mb-4">
+        {visible.map((p) => (
+          <ProductCard
+            key={p.id}
+            product={p}
+            selected={selectedNames.includes(p.name)}
+            recommended={group ? p.curlTypes.includes(group) : false}
+            onClick={() => onToggle(p.name)}
+          />
+        ))}
+        {visible.length === 0 && (
+          <p style={{ color: T.inkSoft, fontSize: 12.5 }} className="py-2">No products listed for this brand yet.</p>
+        )}
+      </div>
+
+      <label style={{ ...mono, fontSize: 11, color: T.inkSoft }} className="block mb-2 tracking-wide">
+        CAN'T FIND IT? ADD YOUR OWN
+      </label>
+      <div className="flex gap-2">
+        <input
+          value={customDraft}
+          onChange={(e) => setCustomDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && customDraft.trim()) {
+              onToggle(customDraft.trim());
+              setCustomDraft("");
+            }
+          }}
+          placeholder="Product name"
+          style={{ background: T.surface, border: `1.5px solid ${T.line}`, color: T.ink }}
+          className="flex-1 rounded-2xl px-4 py-3 outline-none text-sm"
+        />
+        <button
+          onClick={() => {
+            if (customDraft.trim()) {
+              onToggle(customDraft.trim());
+              setCustomDraft("");
+            }
+          }}
+          style={{ background: T.ink, color: T.cream }}
+          className="rounded-2xl px-4"
+        >
+          <Plus size={18} />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -240,6 +383,7 @@ export default function App() {
         {screen === "log" && (
           <LogFlow
             initialEntry={todayEntry}
+            profile={profile}
             onCancel={() => setScreen("home")}
             onSave={async (entry) => {
               await upsertEntry(entry);
@@ -514,6 +658,8 @@ function Home({ profile, diary, todayEntry, streak, onLog, onOpenDiary }) {
         </div>
       )}
 
+      <RecommendedStrip hairType={profile.hairType} />
+
       <button onClick={onOpenDiary} className="w-full flex items-center justify-between py-4" style={{ borderTop: `1px solid ${T.line}` }}>
         <span style={{ ...display, fontSize: 16, fontWeight: 500 }}>
           {diary.length === 0 ? "No entries yet" : `${diary.length} ${diary.length === 1 ? "entry" : "entries"} in your diary`}
@@ -524,11 +670,41 @@ function Home({ profile, diary, todayEntry, streak, onLog, onOpenDiary }) {
   );
 }
 
-function LogFlow({ initialEntry, onCancel, onSave }) {
+function RecommendedStrip({ hairType }) {
+  const curl = CURL_TYPES.find((c) => c.id === hairType);
+  const recs = recommendedProducts(hairType, 8);
+  if (recs.length === 0) return null;
+  return (
+    <div className="mb-6">
+      <p style={{ ...mono, fontSize: 11, color: T.inkSoft }} className="tracking-wide mb-3">
+        RECOMMENDED FOR {hairType} {curl ? `(${curl.label.toUpperCase()})` : ""}
+      </p>
+      <div className="flex gap-3 overflow-x-auto -mx-6 px-6 pb-1" style={{ scrollbarWidth: "none" }}>
+        {recs.map((p) => {
+          const brand = brandById(p.brand);
+          return (
+            <div
+              key={p.id}
+              style={{ background: T.surface, border: `1.5px solid ${T.line}`, width: 148 }}
+              className="rounded-2xl p-3 flex-shrink-0"
+            >
+              <BrandTile brand={brand} size={36} />
+              <p style={{ fontSize: 12.5, fontWeight: 500, color: T.ink }} className="leading-snug mt-2.5 mb-1">
+                {p.name}
+              </p>
+              <p style={{ ...mono, fontSize: 10, color: T.inkSoft }}>{brand?.name}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LogFlow({ initialEntry, profile, onCancel, onSave }) {
   const [step, setStep] = useState(0);
   const [activities, setActivities] = useState(initialEntry?.activities || []);
   const [products, setProducts] = useState(initialEntry?.products || {});
-  const [productDraft, setProductDraft] = useState({});
   const [feeling, setFeeling] = useState(initialEntry?.feeling || "");
   const [notes, setNotes] = useState(initialEntry?.notes || "");
   const [busy, setBusy] = useState(false);
@@ -540,14 +716,12 @@ function LogFlow({ initialEntry, onCancel, onSave }) {
     setActivities((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   };
 
-  const addProduct = (activityId) => {
-    const val = (productDraft[activityId] || "").trim();
-    if (!val) return;
-    setProducts((cur) => ({ ...cur, [activityId]: [...(cur[activityId] || []), val] }));
-    setProductDraft((cur) => ({ ...cur, [activityId]: "" }));
-  };
-  const removeProduct = (activityId, idx) => {
-    setProducts((cur) => ({ ...cur, [activityId]: cur[activityId].filter((_, i) => i !== idx) }));
+  const toggleProduct = (activityId, name) => {
+    setProducts((cur) => {
+      const list = cur[activityId] || [];
+      const exists = list.includes(name);
+      return { ...cur, [activityId]: exists ? list.filter((n) => n !== name) : [...list, name] };
+    });
   };
 
   const isLast = step === totalSteps - 1;
@@ -610,35 +784,17 @@ function LogFlow({ initialEntry, onCancel, onSave }) {
       )}
 
       {currentProductActivity && (
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col overflow-y-auto">
           <h2 style={{ ...display, fontSize: 24, fontWeight: 600 }} className="mb-1">
             Which {currentProductActivity.label.toLowerCase()} did you use?
           </h2>
-          <p style={{ color: T.inkSoft, fontSize: 13 }} className="mb-6">Add one or more products.</p>
-          <div className="flex gap-2 mb-4">
-            <input
-              value={productDraft[currentProductActivity.id] || ""}
-              onChange={(e) => setProductDraft((c) => ({ ...c, [currentProductActivity.id]: e.target.value }))}
-              onKeyDown={(e) => e.key === "Enter" && addProduct(currentProductActivity.id)}
-              placeholder="e.g. Shea Moisture Curl Enhancing Smoothie"
-              style={{ background: T.surface, border: `1.5px solid ${T.line}`, color: T.ink }}
-              className="flex-1 rounded-2xl px-4 py-3 outline-none text-sm"
-            />
-            <button onClick={() => addProduct(currentProductActivity.id)} style={{ background: T.ink, color: T.cream }} className="rounded-2xl px-4">
-              <Plus size={18} />
-            </button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {(products[currentProductActivity.id] || []).map((p, i) => (
-              <div key={i} style={{ background: T.surfaceSunk }} className="rounded-xl px-4 py-2.5 flex items-center justify-between text-sm">
-                <span>{p}</span>
-                <button onClick={() => removeProduct(currentProductActivity.id, i)} style={{ color: T.inkSoft }}><X size={14} /></button>
-              </div>
-            ))}
-            {(products[currentProductActivity.id] || []).length === 0 && (
-              <p style={{ color: T.inkSoft, fontSize: 12.5 }}>No products added yet — you can also skip this.</p>
-            )}
-          </div>
+          <p style={{ color: T.inkSoft, fontSize: 13 }} className="mb-4">Browse by brand, or add your own below.</p>
+          <ProductPicker
+            category={currentProductActivity.id}
+            hairType={profile?.hairType}
+            selectedNames={products[currentProductActivity.id] || []}
+            onToggle={(name) => toggleProduct(currentProductActivity.id, name)}
+          />
         </div>
       )}
 
